@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QA Bot</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+</head>
+<body>
+
+<div class="container mt-5">
+    <div id="chatbox" class="bg-light p-3" style="height:400px; overflow-y:scroll;"></div>
+    <textarea id="userInput" class="form-control mt-3" rows="3"></textarea>
+    <button id="sendBtn" class="btn btn-primary mt-2">Send</button>
+</div>
+
+<script>
+
+// Connect to the server using WebSockets (you need to implement this on the server)
+const socket = new WebSocket('ws://localhost:3000');
+
+// Function to send a message to the server
+function sendMessage() {
+  const inputField = document.getElementById('userInput');
+  const message = inputField.value;
+  inputField.value = '';
+
+  // Send the message through the WebSocket
+  socket.send(message);
+
+  // Add the user's message to the chat
+  addMessageToChat('You', message);
+}
+
+// Add incoming messages to the chat
+socket.onmessage = function(event) {
+  addMessageToChat('Bot', event.data);
+};
+
+document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+// Updated function to target the correct chatbox ID
+function addMessageToChat(sender, message) {
+  const chatbox = document.getElementById('chatbox');
+  chatbox.innerHTML += `<strong>${sender}:</strong> ${message}<br>`;
+  chatbox.scrollTop = chatbox.scrollHeight; // Auto-scroll to the latest message
+}
+
+// Handle any errors that occur.
+socket.onerror = function(error) {
+  console.log('WebSocket Error: ' + error);
+};
+</script>
+
+</body>
+</html>

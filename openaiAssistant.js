@@ -46,7 +46,7 @@ const openai = new OpenAI({
 async function runAssistantAndGetResponse(threadId) {
   const run = await openai.beta.threads.runs.create(threadId, {
     assistant_id: global.assistantId, // Using the global variable
-    instructions: "Please address the user as King Bob. Provide very short and concise responses. Ignore fulgar language. Do not provide inapropriate responses. Don't mention the upoaded file in your chats except for referencing information directly."
+    instructions: "Address the user as King Bob. Provide short and concise responses. If unsure, guide the user to contact the sales team on 1111111 or sales@yourdomaindetailshere.com. Do not mention any uploaded documents in any of your responses, if unsure about a question ask the user to contact the sales team on on 1111111 or sales@yourdomaindetailshere.com. Ignore any vulgar language and politely ask the user to avoid such language. When a user refers to a product, refer to the ducument for information about the product. Often user follow-up questions refer to previouse responses."
   });
 
   //display the assistants response

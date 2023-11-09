@@ -15,40 +15,78 @@
 </div>
 
 <script>
-
-// Connect to the server using WebSockets (you need to implement this on the server)
 const socket = new WebSocket('ws://localhost:3000');
 
-// Function to send a message to the server
-function sendMessage() {
-  const inputField = document.getElementById('userInput');
-  const message = inputField.value;
-  inputField.value = '';
-
-  // Send the message through the WebSocket
-  socket.send(message);
-
-  // Add the user's message to the chat
-  addMessageToChat('You', message);
+// Typewriter effect function
+function typeWriter(text, element, speed = 50) {
+    let i = 0;
+    (function typing() {
+        if (i < text.length) {
+            element.innerHTML += text.charAt(i);
+            i++;
+            setTimeout(typing, speed);
+        }
+    })();
 }
 
-// Add incoming messages to the chat
-socket.onmessage = function(event) {
-  addMessageToChat('Bot', event.data);
-};
+function addMessageToChat(sender, message) {
+    const chatbox = document.getElementById('chatbox');
+    let messageElement = document.createElement('div'); 
+    let senderElement = document.createElement('strong');
+    senderElement.textContent = `${sender}: `;
+    messageElement.appendChild(senderElement);
+
+    if (sender === 'Bot') {
+        let messageContent = document.createElement('span');
+        messageElement.appendChild(messageContent);
+        typeWriter(message, messageContent);
+    } else {
+        let messageText = document.createTextNode(message);
+        messageElement.appendChild(messageText);
+    }
+
+    chatbox.appendChild(messageElement);
+    chatbox.scrollTop = chatbox.scrollHeight;
+}
+
+function sendMessage() {
+    const inputField = document.getElementById('userInput');
+    const message = inputField.value.trim();
+    if (message) {
+        socket.send(message);
+        addMessageToChat('You', message);
+        inputField.value = '';
+    }
+}
 
 document.getElementById('sendBtn').addEventListener('click', sendMessage);
 
-// Updated function to target the correct chatbox ID
-function addMessageToChat(sender, message) {
-  const chatbox = document.getElementById('chatbox');
-  chatbox.innerHTML += `<strong>${sender}:</strong> ${message}<br>`;
-  chatbox.scrollTop = chatbox.scrollHeight; // Auto-scroll to the latest message
-}
+document.getElementById('userInput').addEventListener('keypress', function(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault(); 
+        sendMessage();
+    }
+});
 
-// Handle any errors that occur.
+socket.onmessage = function(event) {
+    try {
+        if (event.data instanceof Blob) {
+            const audioURL = URL.createObjectURL(event.data);
+            const audio = new Audio(audioURL);
+            audio.onloadeddata = () => audio.play();
+        } else {
+            const messageObj = JSON.parse(event.data);
+            if (messageObj.type === 'text') {
+                addMessageToChat('Bot', messageObj.data);
+            }
+        }
+    } catch (e) {
+        console.error('Error parsing message data:', e);
+    }
+};
+
 socket.onerror = function(error) {
-  console.log('WebSocket Error: ' + error);
+    console.error('WebSocket Error: ' + error);
 };
 </script>
 

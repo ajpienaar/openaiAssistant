@@ -2,15 +2,16 @@ require('dotenv').config();
 const openaiAssistant = require('./openaiAssistant');
 const startWebSocketServer = require('./websocketServer');
 
-const PORT = 3000; // Port for the WebSocket server
-
-// Main flow
-(async () => {
+async function setupAndStartServer(PORT) {
   try {
     const fileId = await openaiAssistant.uploadFile("uploads/knowledge.pdf");
-    global.assistantId = await openaiAssistant.createAssistant(fileId); // Store assistantId in a global variable
-    startWebSocketServer(PORT);
+    const id = await openaiAssistant.createAssistant(fileId);
+    startWebSocketServer(PORT, id);
   } catch (error) {
     console.error("An error occurred during setup:", error);
   }
-})();
+}
+
+// Call the setup function with the desired port
+const PORT = 3000;
+setupAndStartServer(PORT);

@@ -5,30 +5,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QA Bot</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.1/css/all.min.css">
 </head>
 <body>
 
-<div class="container mt-5">
-    <div id="chatbox" class="bg-light p-3" style="height:400px; overflow-y:scroll;"></div>
-    <textarea id="userInput" class="form-control mt-3" rows="3"></textarea>
-    <button id="sendBtn" class="btn btn-primary mt-2">Send</button>
-</div>
+    <div class="container mt-5">
+        <div id="chatbox" class="bg-light p-3" style="height:400px; overflow-y:scroll;"></div>
+        <textarea id="userInput" class="form-control mt-3" rows="3"></textarea>
+        
+        <div class="row mt-2">
+            <div class="col-12 col-md-11">
+                <button id="sendBtn" class="btn btn-primary mb-2 mb-md-0">Send</button>
+                <button id="startBtn" class="btn btn-danger mb-2 mb-md-0">Start Recording</button>
+                <button id="stopBtn" disabled class="btn btn-success mb-2 mb-md-0">Stop Recording</button>
+            </div>
+            <div class="col-12 col-md-1 text-md-end text-center">
+                <button id="muteButton" class="btn btn-primary btn-sm">
+                    <i class="fa-solid fa-volume-high"></i> <!-- Icon for unmute -->
+                    <i class="fa-solid fa-volume-xmark" style="display: none;"></i> <!-- Icon for mute -->
+                </button>
+            </div>
+        </div>
+    </div>
 
 <script>
+//creates a connection with teh serevr
 const socket = new WebSocket('ws://localhost:3000');
 
-// Typewriter effect function
+// Typewriter effect function that hides the buttons while typing
 function typeWriter(text, element, speed = 50) {
     let i = 0;
+
+    // Store the original state of buttons
+    const startBtnOriginalState = document.getElementById('startBtn').disabled;
+    const stopBtnOriginalState = document.getElementById('stopBtn').disabled;
+    const sendBtnOriginalState = document.getElementById('sendBtn').disabled;
+
+    // Disable buttons at the start of typewriter effect
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('stopBtn').disabled = true;
+    document.getElementById('sendBtn').disabled = true;
+
     (function typing() {
         if (i < text.length) {
             element.innerHTML += text.charAt(i);
             i++;
             setTimeout(typing, speed);
+        } else {
+            // Revert buttons to their original state after typewriter effect is complete
+            document.getElementById('startBtn').disabled = startBtnOriginalState;
+            document.getElementById('stopBtn').disabled = stopBtnOriginalState;
+            document.getElementById('sendBtn').disabled = sendBtnOriginalState;
         }
     })();
 }
-
+//manages the chat window and adds messages to it
 function addMessageToChat(sender, message) {
     const chatbox = document.getElementById('chatbox');
     let messageElement = document.createElement('div'); 
@@ -48,19 +79,21 @@ function addMessageToChat(sender, message) {
     chatbox.appendChild(messageElement);
     chatbox.scrollTop = chatbox.scrollHeight;
 }
-
+//send text message to the server
 function sendMessage() {
     const inputField = document.getElementById('userInput');
-    const message = inputField.value.trim();
-    if (message) {
+    const text = inputField.value.trim();
+    if (text) {
+        //notify that a text message is being sent
+        const message = JSON.stringify({ type: 'text', data: text });
         socket.send(message);
-        addMessageToChat('You', message);
+        addMessageToChat('You', text);
         inputField.value = '';
     }
 }
-
+//sends message on click
 document.getElementById('sendBtn').addEventListener('click', sendMessage);
-
+//sends message on enter key
 document.getElementById('userInput').addEventListener('keypress', function(event) {
     if (event.key === 'Enter') {
         event.preventDefault(); 
@@ -68,12 +101,38 @@ document.getElementById('userInput').addEventListener('keypress', function(event
     }
 });
 
-socket.onmessage = function(event) {
+// Event listener for keyup on userInput to hide record buttons when there is text
+document.getElementById('userInput').addEventListener('keyup', function(event) {
+    updateButtonState(this.value);
+});
+
+// Event listener for the send button userInput to hide record buttons when there is text
+document.getElementById('sendBtn').addEventListener('click', function(event) {
+    updateButtonState(this.value);
+});
+//disable buttons when there is text in the input field
+function updateButtonState(value) {
+    var startBtn = document.getElementById('startBtn');
+    var stopBtn = document.getElementById('stopBtn');
+
+    if (value) {
+        // Disable and hide buttons if there is text being entered
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
+    } else {
+        // Enable and show buttons if the input field is empty
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+    }
+}
+//handles the server response and logs it to the chat window / plays voice
+let globalAudio = new Audio();
+socket.onmessage = function(event) {    
     try {
         if (event.data instanceof Blob) {
             const audioURL = URL.createObjectURL(event.data);
-            const audio = new Audio(audioURL);
-            audio.onloadeddata = () => audio.play();
+            globalAudio.src = audioURL;
+            globalAudio.onloadeddata = () => globalAudio.play();
         } else {
             const messageObj = JSON.parse(event.data);
             if (messageObj.type === 'text') {
@@ -84,6 +143,71 @@ socket.onmessage = function(event) {
         console.error('Error parsing message data:', e);
     }
 };
+//records audio and sends to the server
+let mediaRecorder;
+let audioChunks = [];
+
+function startRecording() {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+    .then(stream => {
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            sendAudioMessage(audioBlob);
+            audioChunks = []; // Reset the chunks for the next recording
+        };
+        mediaRecorder.start();
+        document.getElementById('sendBtn').disabled = true;
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('stopBtn').disabled = false;
+    })
+    .catch(err => {
+        console.error("Error accessing microphone:", err);
+    });
+}
+//manages the stop button to end recording
+function stopRecording() {
+    mediaRecorder.stop();
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    document.getElementById('sendBtn').disabled = false;
+
+}
+
+//sends the audio the server and logs confirmation to the caht window
+function sendAudioMessage(blob) {
+    if (blob) {
+        // Notify the server that an audio message is being sent
+        socket.send(JSON.stringify({ type: 'audio' }));
+        socket.send(blob);
+        addMessageToChat('You', "Audio sent!");
+    }
+}
+//manages recording
+document.getElementById('startBtn').addEventListener('click', startRecording);
+document.getElementById('stopBtn').addEventListener('click', stopRecording);
+
+//manage mute button
+document.getElementById('muteButton').addEventListener('click', function() {
+    globalAudio.muted = !globalAudio.muted; // Toggle the muted state
+
+    // Toggle between mute and unmute icons
+    var unmuteIcon = this.querySelector('.fa-volume-high');
+    var muteIcon = this.querySelector('.fa-volume-xmark');
+
+    if (globalAudio.muted) {
+        unmuteIcon.style.display = 'none';
+        muteIcon.style.display = 'inline-block';
+        this.childNodes[this.childNodes.length - 1]; // Update button text only
+    } else {
+        unmuteIcon.style.display = 'inline-block';
+        muteIcon.style.display = 'none';
+        this.childNodes[this.childNodes.length - 1]; // Update button text only
+    }
+});
 
 socket.onerror = function(error) {
     console.error('WebSocket Error: ' + error);

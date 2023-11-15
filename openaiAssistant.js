@@ -1,5 +1,10 @@
 const fs = require('fs');
+const path = require('path');
+const util = require('util');
 const { OpenAI } = require('openai');
+
+const writeFile = util.promisify(fs.writeFile);
+const unlinkFile = util.promisify(fs.unlink);
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -94,11 +99,36 @@ async function generateSpeech(text) {
   
   // Convert the response into a buffer
   const buffer = Buffer.from(await mp3.arrayBuffer());
-  // save the buffer to a file if needed
-  // await fs.promises.writeFile(speechFile, buffer);
   
   return buffer;
 }
+
+//transcribe the audio file
+async function transcribeAudio(audioBuffer) {
+  try {
+    // Generate a temporary file name
+    const tempFilePath = path.join(__dirname, 'tempAudio.webm');
+
+    // Write the buffer to the temporary file
+    await writeFile(tempFilePath, audioBuffer);
+
+    // Use the file path with the transcription API
+    const transcription = await openai.audio.transcriptions.create({
+      file: fs.createReadStream(tempFilePath),
+      model: 'whisper-1',
+    });
+
+    // Delete the temporary file after use
+    await unlinkFile(tempFilePath);
+
+    return transcription.text;
+    
+  } catch (error) {
+    console.error('Error during audio transcription:', error);
+    throw error;
+  }
+}
+
 //export the functions for use
 module.exports = {
   uploadFile,
@@ -107,4 +137,5 @@ module.exports = {
   addMessageToThread,
   runAssistantAndGetResponse,
   generateSpeech,
+  transcribeAudio,
 };
